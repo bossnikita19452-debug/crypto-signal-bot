@@ -1,43 +1,37 @@
-import ccxt
 import asyncio
 from analyzer import analyze_coin
 from database import save_signal
-from config import MIN_VOLUME_USD, MIN_RR, MAX_RR, TOP_COINS, TRADE_TYPES, SIGNAL_EMOJI
+from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI
 from telegram import Bot
 from config import CHANNEL_ID
 
-# Используем Bybit вместо Binance
-exchange = ccxt.bybit({"enableRateLimit": True})
+# Фиксированный список топ монет (чтобы не зависеть от бирж)
+TOP_COINS_LIST = [
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",
+    "DOGE/USDT", "ADA/USDT", "AVAX/USDT", "DOT/USDT", "LINK/USDT",
+    "MATIC/USDT", "LTC/USDT", "ATOM/USDT", "UNI/USDT", "NEAR/USDT",
+    "APT/USDT", "ARB/USDT", "OP/USDT", "SUI/USDT", "PEPE/USDT",
+    "SHIB/USDT", "TRX/USDT", "TON/USDT", "ICP/USDT", "FIL/USDT",
+    "AAVE/USDT", "MKR/USDT", "INJ/USDT", "SEI/USDT", "TIA/USDT"
+]
 
 async def get_top_volume_coins():
-    try:
-        tickers = exchange.fetch_tickers()
-        pairs = []
-        for symbol, t in tickers.items():
-            if symbol.endswith("/USDT") and t.get("quoteVolume"):
-                vol = float(t["quoteVolume"] or 0)
-                if vol >= MIN_VOLUME_USD:
-                    pairs.append((symbol, vol))
-        pairs.sort(key=lambda x: x[1], reverse=True)
-        return [p[0] for p in pairs[:TOP_COINS]]
-    except Exception as e:
-        print(f"Ошибка получения монет: {e}")
-        # Запасной список на случай ошибки
-        return ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",
-                "DOGE/USDT", "ADA/USDT", "AVAX/USDT", "DOT/USDT", "LINK/USDT"]
+    return TOP_COINS_LIST
 
 async def scan_once(bot: Bot):
     coins = await get_top_volume_coins()
     print(f"Сканируем {len(coins)} монет...")
 
     for trade_type, meta in TRADE_TYPES.items():
-        for symbol in coins[:20]:  # ограничиваем, чтобы не спамить
+        for symbol in coins:
             try:
-                ohlcv = exchange.fetch_ohlcv(symbol, meta["tf"], limit=30)
-                market_data = f"Последние свечи: {ohlcv[-5:]}"
+                # Передаём минимальные данные, анализ делает Groq
+                market_data = f"Монета: {symbol}. Таймфрейм: {meta['tf']}. Сделай технический анализ на основе текущей рыночной ситуации."
+                
                 result = analyze_coin(symbol, meta["tf"], market_data)
 
                 if "error" in result:
+                    print(f"Ошибка анализа {symbol}: {result['error']}")
                     continue
 
                 rr = float(result.get("rr", 0))
@@ -47,30 +41,34 @@ async def scan_once(bot: Bot):
                 data = {
                     "symbol": symbol,
                     "trade_type": trade_type,
-                    "side": result["side"],
-                    "entry": result["entry"],
-                    "stop": result["stop"],
-                    "take": result["take"],
+                    "side": result.get("side", "LONG"),
+                    "entry": result.get("entry", 0),
+                    "stop": result.get("stop", 0),
+                    "take": result.get("take", 0),
                     "rr": rr,
-                    "strength": result["strength"],
-                    "reason": result["reason"]
+                    "strength": result.get("strength", "medium"),
+                    "reason": result.get("reason", "")
                 }
+                
                 save_signal(data)
 
-                emoji = SIGNAL_EMOJI.get(result["strength"], "⚪")
+                emoji = SIGNAL_EMOJI.get(result.get("strength", "medium"), "⚪")
                 text = f"""
 {emoji} <b>{meta['name']} | {symbol}</b>
 
-Направление: <b>{result['side']}</b>
-Вход: <code>{result['entry']}</code>
-Стоп: <code>{result['stop']}</code>
-Тейк: <code>{result['take']}</code>
+Направление: <b>{result.get('side')}</b>
+Вход: <code>{result.get('entry')}</code>
+Стоп: <code>{result.get('stop')}</code>
+Тейк: <code>{result.get('take')}</code>
 R:R = <b>1:{rr:.2f}</b>
 
-{result['reason']}
+{result.get('reason')}
 """
                 if CHANNEL_ID:
                     await bot.send_message(CHANNEL_ID, text, parse_mode="HTML")
                     
+                # Небольшая пауза, чтобы не превысить лимиты Groq
+                await asyncio.sleep(1.5)
+
             except Exception as e:
                 print(f"Ошибка {symbol}: {e}")
