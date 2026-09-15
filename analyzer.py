@@ -28,7 +28,7 @@ def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
 """
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="qwen/qwen3.8-27b",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.25,
             response_format={"type": "json_object"}
