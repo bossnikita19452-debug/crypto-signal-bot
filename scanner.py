@@ -4,27 +4,36 @@ from analyzer import analyze_coin
 from database import save_signal
 from config import MIN_VOLUME_USD, MIN_RR, MAX_RR, TOP_COINS, TRADE_TYPES, SIGNAL_EMOJI
 from telegram import Bot
-from config import TELEGRAM_BOT_TOKEN, CHANNEL_ID
+from config import CHANNEL_ID
 
-exchange = ccxt.binance({"enableRateLimit": True})
+# Используем Bybit вместо Binance
+exchange = ccxt.bybit({"enableRateLimit": True})
 
 async def get_top_volume_coins():
-    tickers = exchange.fetch_tickers()
-    pairs = []
-    for symbol, t in tickers.items():
-        if symbol.endswith("/USDT") and t.get("quoteVolume"):
-            vol = t["quoteVolume"]
-            if vol >= MIN_VOLUME_USD:
-                pairs.append((symbol, vol))
-    pairs.sort(key=lambda x: x[1], reverse=True)
-    return [p[0] for p in pairs[:TOP_COINS]]
+    try:
+        tickers = exchange.fetch_tickers()
+        pairs = []
+        for symbol, t in tickers.items():
+            if symbol.endswith("/USDT") and t.get("quoteVolume"):
+                vol = float(t["quoteVolume"] or 0)
+                if vol >= MIN_VOLUME_USD:
+                    pairs.append((symbol, vol))
+        pairs.sort(key=lambda x: x[1], reverse=True)
+        return [p[0] for p in pairs[:TOP_COINS]]
+    except Exception as e:
+        print(f"Ошибка получения монет: {e}")
+        # Запасной список на случай ошибки
+        return ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",
+                "DOGE/USDT", "ADA/USDT", "AVAX/USDT", "DOT/USDT", "LINK/USDT"]
 
 async def scan_once(bot: Bot):
     coins = await get_top_volume_coins()
+    print(f"Сканируем {len(coins)} монет...")
+
     for trade_type, meta in TRADE_TYPES.items():
-        for symbol in coins[:30]:  # чтобы не спамить
+        for symbol in coins[:20]:  # ограничиваем, чтобы не спамить
             try:
-                ohlcv = exchange.fetch_ohlcv(symbol, meta["tf"], limit=50)
+                ohlcv = exchange.fetch_ohlcv(symbol, meta["tf"], limit=30)
                 market_data = f"Последние свечи: {ohlcv[-5:]}"
                 result = analyze_coin(symbol, meta["tf"], market_data)
 
@@ -46,7 +55,7 @@ async def scan_once(bot: Bot):
                     "strength": result["strength"],
                     "reason": result["reason"]
                 }
-                signal_id = save_signal(data)
+                save_signal(data)
 
                 emoji = SIGNAL_EMOJI.get(result["strength"], "⚪")
                 text = f"""
@@ -62,5 +71,6 @@ R:R = <b>1:{rr:.2f}</b>
 """
                 if CHANNEL_ID:
                     await bot.send_message(CHANNEL_ID, text, parse_mode="HTML")
+                    
             except Exception as e:
                 print(f"Ошибка {symbol}: {e}")
