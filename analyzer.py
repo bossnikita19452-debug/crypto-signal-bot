@@ -31,6 +31,7 @@ def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
             model="qwen/qwen3.8-27b",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.25,
+            max_tokens=600,                    # ← добавили ограничение
             response_format={"type": "json_object"}
         )
         return json.loads(response.choices[0].message.content)
