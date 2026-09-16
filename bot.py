@@ -8,7 +8,7 @@ import config
 from config import TELEGRAM_BOT_TOKEN, ADMIN_IDS, CHANNEL_ID
 from database import init_db, get_active_signals, get_recent_signals, get_stats
 from scanner import scan_once
-from stats_checker import check_open_signals
+from stats_checker import check_open_signals, set_bot
 from news import get_crypto_news
 from analyzer import analyze_coin
 
@@ -116,7 +116,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         config.SCANNING_ENABLED = not config.SCANNING_ENABLED
         status = "▶️ активно" if config.SCANNING_ENABLED else "⏸ остановлено"
         await query.answer(f"Сканирование {status}")
-        # Обновить меню
         status_label = "▶️ Активно" if config.SCANNING_ENABLED else "⏸ Остановлено"
         toggle_text = "⏸ Остановить сканирование" if config.SCANNING_ENABLED else "▶️ Возобновить сканирование"
         keyboard = [
@@ -145,7 +144,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id not in ADMIN_IDS:
             return
         await query.edit_message_text("Проверяю открытые сделки...")
-        await check_open_signals()
+        await check_open_signals(chat_id=CHANNEL_ID)
         await query.edit_message_text("Проверка завершена.", reply_markup=main_menu())
 
     elif data == "back_main":
@@ -162,9 +161,15 @@ async def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
 
+    # Передаём бота в stats_checker для отправки уведомлений
+    set_bot(app.bot)
+
     scheduler = AsyncIOScheduler()
     scheduler.add_job(scan_once, "interval", hours=1, args=[app.bot])
-    scheduler.add_job(check_open_signals, "interval", minutes=30)
+    scheduler.add_job(
+        check_open_signals, "interval", minutes=30,
+        kwargs={"chat_id": CHANNEL_ID}
+    )
     scheduler.start()
 
     logger.info("Бот запускается...")
