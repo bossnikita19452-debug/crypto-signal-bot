@@ -1,4 +1,5 @@
 import json
+import re
 from openai import AsyncOpenAI
 from config import GROQ_API_KEY, GROQ_MODEL
 
@@ -9,9 +10,9 @@ client = AsyncOpenAI(
 
 SYSTEM_PROMPT = """Ты — профессиональный крипто-аналитик, работающий с трендовыми стратегиями.
 
-Твоя задача — найти сетап для СРЕДНЕСРОЧНОЙ торговли (удержание от нескольких часов до нескольких дней).
+Найди сетап для СРЕДНЕСРОЧНОЙ торговли (удержание от нескольких часов до нескольких дней).
 
-Ты должен ответить ТОЛЬКО валидным JSON без лишнего текста. Формат:
+Ответь ТОЛЬКО валидным JSON без лишнего текста. Формат:
 {
   "side": "LONG" | "SHORT" | "NONE",
   "strength": "strong" | "medium" | "weak",
@@ -22,19 +23,43 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
   "reason": "краткое объяснение на русском"
 }
 
-Правила для сетапа:
+Правила:
 - Ищем ТРЕНД на 4-часовом таймфрейме (цена выше/ниже EMA 200).
 - Ждём ОТКАТ к EMA 50 или уровню поддержки/сопротивления.
-- Вход только когда откат завершается (появляется бычья/медвежья свеча).
-- Stop ставим за локальный минимум/максимум + буфер 0.5%.
+- Stop — за локальный минимум/максимум + буфер 0.5%.
 - Take = минимум 1.5R, максимум 3R.
 - Если чёткого тренда с откатом нет — верни side: "NONE".
-
-Сила сигнала:
-- strong: тренд четкий + откат глубокий + RSI в благоприятной зоне.
-- medium: тренд есть, но откат неглубокий или RSI на границе.
-- weak: тренд слабый, много противоречий — такие сигналы лучше пропускать.
 """
+
+
+def _extract_json(text: str) -> dict | None:
+    """Попытаться вытащить JSON из ответа модели."""
+    if not text:
+        return None
+
+    # Убираем markdown-обёртки ```json ... ```
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip()
+
+    # Прямая попытка
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Ищем первую { ... } структуру
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    return None
 
 
 async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
@@ -47,15 +72,15 @@ async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
             ],
             temperature=0.3,
             max_tokens=500,
+            response_format={"type": "json_object"},  # просим модель вернуть JSON
         )
-        content = response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
 
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        content = content.strip()
+        parsed = _extract_json(content)
+        if parsed is None:
+            return {"error": "Не удалось распарсить JSON", "raw": content[:100]}
 
-        return json.loads(content)
+        return parsed
+
     except Exception as e:
         return {"error": str(e)[:100]}
