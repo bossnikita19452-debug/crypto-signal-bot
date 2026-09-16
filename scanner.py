@@ -1,4 +1,4 @@
-import asyncio
+ import asyncio
 import aiohttp
 from analyzer import analyze_coin
 from database import save_signal
@@ -22,7 +22,6 @@ COINS = {
     "INJ/USDT": "injective-protocol",
     "HYPE/USDT": "hyperliquid",
     "AKE/USDT": "akedo",
-}
 }
 
 async def get_prices():
@@ -106,5 +105,4 @@ async def scan_once(bot: Bot):
             await asyncio.sleep(5)
 
         except Exception as e:
-            print(f"Ошибка {symbol}: {e}")
-            
+            print(f"Ошибка {symbol}: {e}")        
