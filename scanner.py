@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import config
 from analyzer import analyze_coin
 from database import save_signal
 from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI, CHANNEL_ID
@@ -68,12 +69,22 @@ async def get_prices():
 
 
 async def scan_once(bot: Bot):
+    # Проверка флага — если сканер выключен, выходим
+    if not config.SCANNING_ENABLED:
+        print("⏸ Сканирование остановлено пользователем")
+        return
+
     prices = await get_prices()
     print(f"Сканируем {len(COINS)} монет (тренд, 4ч)...")
 
     meta = TRADE_TYPES["swing"]
 
     for symbol, gecko_id in COINS.items():
+        # Проверяем флаг на каждой итерации — чтобы можно было прервать посреди сканирования
+        if not config.SCANNING_ENABLED:
+            print("⏸ Сканирование остановлено пользователем (в процессе)")
+            return
+
         try:
             price_data = prices.get(gecko_id, {})
             current_price = price_data.get("usd")
@@ -89,7 +100,6 @@ async def scan_once(bot: Bot):
 
             result = await analyze_coin(symbol, meta["tf"], market_data)
 
-            # Обработка ошибок ИИ
             if "error" in result:
                 err = str(result["error"])
                 if "429" in err or "rate" in err.lower():
@@ -107,12 +117,22 @@ async def scan_once(bot: Bot):
             if not (meta["min_rr"] <= rr <= meta["max_rr"]):
                 continue
 
+            entry = result.get("entry", 0)
+            stop = result.get("stop", 0)
+
+            # Расчёт плеча для стопа = 100% маржи
+            if entry and stop and entry > stop:
+                stop_pct = (entry - stop) / entry * 100
+                leverage = round(100 / stop_pct) if stop_pct > 0 else 1
+            else:
+                leverage = 1
+
             data = {
                 "symbol": symbol,
                 "trade_type": "swing",
                 "side": side,
-                "entry": result.get("entry", 0),
-                "stop": result.get("stop", 0),
+                "entry": entry,
+                "stop": stop,
                 "take": result.get("take", 0),
                 "rr": rr,
                 "strength": result.get("strength", "medium"),
@@ -126,10 +146,11 @@ async def scan_once(bot: Bot):
                 f"{emoji} <b>{meta['name']} | {symbol}</b>\n\n"
                 f"Текущая цена: <code>${current_price}</code>\n"
                 f"Направление: <b>{side}</b>\n"
-                f"Вход: <code>{result.get('entry')}</code>\n"
-                f"Стоп: <code>{result.get('stop')}</code>\n"
+                f"Вход: <code>{entry}</code>\n"
+                f"Стоп: <code>{stop}</code>\n"
                 f"Тейк: <code>{result.get('take')}</code>\n"
-                f"R:R = <b>1:{rr:.2f}</b>\n\n"
+                f"R:R = <b>1:{rr:.2f}</b>\n"
+                f"⚡ Плечо: <b>{leverage}x</b> (стоп = 100% маржи)\n\n"
                 f"{result.get('reason')}"
             )
 
@@ -139,7 +160,6 @@ async def scan_once(bot: Bot):
                 except Exception as e:
                     print(f"Ошибка отправки {symbol}: {e}")
 
-            # Пауза 5 секунд между монетами — защита от 429
             await asyncio.sleep(5)
 
         except Exception as e:
