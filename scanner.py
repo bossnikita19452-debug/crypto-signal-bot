@@ -6,21 +6,54 @@ from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI, CHANNEL_ID
 from telegram import Bot
 from stats_checker import check_open_signals
 
+# Расширенный список монет (до 40)
 COINS = {
+    # Топ-10 по капитализации
     "BTC/USDT": "bitcoin",
     "ETH/USDT": "ethereum",
-    "SOL/USDT": "solana",
+    "BNB/USDT": "binancecoin",
     "XRP/USDT": "ripple",
+    "SOL/USDT": "solana",
+    "TRX/USDT": "tron",
+    "DOGE/USDT": "dogecoin",
+    "ADA/USDT": "cardano",
     "AVAX/USDT": "avalanche-2",
-    "AAVE/USDT": "aave",
-    "ARB/USDT": "arbitrum",
-    "TON/USDT": "the-open-network",
+    "LINK/USDT": "chainlink",
+
+    # Перспективные Layer 1 / Layer 2
     "SUI/USDT": "sui",
-    "XMR/USDT": "monero",
-    "ZEC/USDT": "zcash",
-    "PEPE/USDT": "pepe",
+    "TON/USDT": "the-open-network",
+    "ARB/USDT": "arbitrum",
+    "OP/USDT": "optimism",
+    "APT/USDT": "aptos",
+    "NEAR/USDT": "near",
+    "ATOM/USDT": "cosmos",
+    "DOT/USDT": "polkadot",
+    "SEI/USDT": "sei-network",
     "INJ/USDT": "injective-protocol",
+
+    # DeFi и инфраструктура
+    "AAVE/USDT": "aave",
+    "UNI/USDT": "uniswap",
+    "LDO/USDT": "lido-dao",
+    "CRV/USDT": "curve-dao-token",
+    "PENDLE/USDT": "pendle",
+    "JUP/USDT": "jupiter-exchange-solana",
+    "PYTH/USDT": "pyth-network",
+    "WIF/USDT": "dogwifcoin",
+    "PEPE/USDT": "pepe",
+    "SHIB/USDT": "shiba-inu",
+
+    # Высоковолатильные и трендовые
     "HYPE/USDT": "hyperliquid",
+    "ZEC/USDT": "zcash",
+    "XMR/USDT": "monero",
+    "FIL/USDT": "filecoin",
+    "ICP/USDT": "internet-computer",
+    "RNDR/USDT": "render-token",
+    "FET/USDT": "fetch-ai",
+    "TAO/USDT": "bittensor",
+    "AKT/USDT": "akash-network",
     "AKE/USDT": "akedo",
 }
 
