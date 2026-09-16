@@ -102,7 +102,7 @@ async def main():
 
     # Сканер каждые 15 минут
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(scan_once, "interval", minutes=15, args=[app.bot])
+    scheduler.add_job(scan_once, "interval", hours=1, args=[app.bot])
     scheduler.start()
 
     logger.info("Бот запускается...")
