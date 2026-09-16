@@ -69,7 +69,6 @@ async def get_prices():
 
 
 async def scan_once(bot: Bot):
-    # Проверка флага — если сканер выключен, выходим
     if not config.SCANNING_ENABLED:
         print("⏸ Сканирование остановлено пользователем")
         return
@@ -80,7 +79,6 @@ async def scan_once(bot: Bot):
     meta = TRADE_TYPES["swing"]
 
     for symbol, gecko_id in COINS.items():
-        # Проверяем флаг на каждой итерации — чтобы можно было прервать посреди сканирования
         if not config.SCANNING_ENABLED:
             print("⏸ Сканирование остановлено пользователем (в процессе)")
             return
@@ -165,5 +163,6 @@ async def scan_once(bot: Bot):
         except Exception as e:
             print(f"Ошибка {symbol}: {e}")
 
-    await check_open_signals()
+    # После сканирования проверяем открытые сделки и отправляем уведомления
+    await check_open_signals(chat_id=CHANNEL_ID)
 
