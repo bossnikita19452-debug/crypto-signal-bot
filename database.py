@@ -55,11 +55,27 @@ def save_signal(data: dict) -> int:
     return signal_id
 
 
+def has_active_signal(symbol: str) -> bool:
+    """Есть ли по этой монете незакрытый сигнал (status='active')."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM signals WHERE symbol = ? AND status = 'active'",
+        (symbol,)
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return count > 0
+
+
 def get_active_signals(limit=20):
     """Все открытые сделки (status='active')."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT * FROM signals WHERE status='active' ORDER BY id DESC LIMIT ?", (limit,))
+    c.execute(
+        "SELECT * FROM signals WHERE status='active' ORDER BY id DESC LIMIT ?",
+        (limit,)
+    )
     rows = c.fetchall()
     conn.close()
     return rows
@@ -106,7 +122,6 @@ def get_stats() -> dict:
         if status in stats:
             stats[status] = count
 
-    # Разбивка по типам сделок
     c.execute("""
         SELECT trade_type,
                COUNT(*),
