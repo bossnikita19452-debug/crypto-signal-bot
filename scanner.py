@@ -2,9 +2,8 @@ import asyncio
 import aiohttp
 from analyzer import analyze_coin
 from database import save_signal
-from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI
+from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI, CHANNEL_ID
 from telegram import Bot
-from config import CHANNEL_ID
 from stats_checker import check_open_signals
 
 COINS = {
@@ -25,11 +24,9 @@ COINS = {
     "AKE/USDT": "akedo",
 }
 
-
 async def get_prices():
     ids = ",".join(COINS.values())
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd"
-
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
@@ -39,27 +36,24 @@ async def get_prices():
         print(f"Ошибка получения цен: {e}")
     return {}
 
-
 async def scan_once(bot: Bot):
     prices = await get_prices()
-    print(f"Сканируем {len(COINS)} монет (только скальп)...")
+    print(f"Сканируем {len(COINS)} монет (тренд, 4h)...")
 
-    meta = TRADE_TYPES["scalp"]
+    meta = TRADE_TYPES["swing"]  # ← сменили скальп на среднесрок
 
     for symbol, gecko_id in COINS.items():
         try:
             price_data = prices.get(gecko_id, {})
             current_price = price_data.get("usd")
-
             if not current_price:
-                print(f"Нет цены для {symbol}")
                 continue
 
             market_data = (
                 f"Монета: {symbol}\n"
                 f"Текущая цена: ${current_price}\n"
                 f"Таймфрейм: {meta['tf']}\n"
-                f"Сделай скальп-анализ. Entry, Stop и Take указывай относительно текущей цены ${current_price}."
+                f"Ищи трендовый сетап с откатом для среднесрочной торговли."
             )
 
             result = analyze_coin(symbol, meta["tf"], market_data)
@@ -68,14 +62,18 @@ async def scan_once(bot: Bot):
                 print(f"Ошибка анализа {symbol}: {result['error']}")
                 continue
 
+            side = result.get("side", "NONE")
+            if side == "NONE":
+                continue
+
             rr = float(result.get("rr", 0))
-            if not (MIN_RR <= rr <= MAX_RR):
+            if not (meta["min_rr"] <= rr <= meta["max_rr"]):
                 continue
 
             data = {
                 "symbol": symbol,
-                "trade_type": "scalp",
-                "side": result.get("side", "LONG"),
+                "trade_type": "swing",
+                "side": side,
                 "entry": result.get("entry", 0),
                 "stop": result.get("stop", 0),
                 "take": result.get("take", 0),
@@ -87,11 +85,10 @@ async def scan_once(bot: Bot):
             save_signal(data)
 
             emoji = SIGNAL_EMOJI.get(result.get("strength", "medium"), "⚪")
-
             text = (
                 f"{emoji} <b>{meta['name']} | {symbol}</b>\n\n"
                 f"Текущая цена: <code>${current_price}</code>\n"
-                f"Направление: <b>{result.get('side')}</b>\n"
+                f"Направление: <b>{side}</b>\n"
                 f"Вход: <code>{result.get('entry')}</code>\n"
                 f"Стоп: <code>{result.get('stop')}</code>\n"
                 f"Тейк: <code>{result.get('take')}</code>\n"
@@ -103,12 +100,12 @@ async def scan_once(bot: Bot):
                 try:
                     await bot.send_message(CHANNEL_ID, text, parse_mode="HTML")
                 except Exception as e:
-                    print(f"Ошибка отправки в канал {symbol}: {e}")
+                    print(f"Ошибка отправки {symbol}: {e}")
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(2)  # пауза меньше, так как запросов реже
 
         except Exception as e:
             print(f"Ошибка {symbol}: {e}")
 
-    # Проверяем статусы открытых сделок после каждого сканирования
     await check_open_signals()
+
