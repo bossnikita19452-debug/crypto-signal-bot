@@ -40,5 +40,4 @@ TRADE_TYPES = {
 SIGNAL_EMOJI = {
     "strong": "🟢",
     "medium": "🟡",
-    "weak": "🔴",
-}
+    "
