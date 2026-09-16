@@ -36,6 +36,7 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
 - weak: тренд слабый, много противоречий — такие сигналы лучше пропускать.
 """
 
+
 async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
     try:
         response = await client.chat.completions.create(
@@ -48,13 +49,13 @@ async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
             max_tokens=500,
         )
         content = response.choices[0].message.content.strip()
-        
+
         if content.startswith("```"):
             content = content.split("```")[1]
             if content.startswith("json"):
                 content = content[4:]
         content = content.strip()
-        
+
         return json.loads(content)
     except Exception as e:
         return {"error": str(e)[:100]}
