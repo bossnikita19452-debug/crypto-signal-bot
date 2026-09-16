@@ -23,7 +23,12 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
   "reason": "краткое объяснение на русском"
 }
 
-Правила:
+КРИТИЧЕСКИ ВАЖНО:
+- Ответ должен быть ПОЛНЫМ JSON-объектом, начиная с { и заканчивая }.
+- НЕ обрывай ответ на середине.
+- Поле "reason" должно быть коротким (до 100 символов).
+
+Правила сетапа:
 - Ищем ТРЕНД на 4-часовом таймфрейме (цена выше/ниже EMA 200).
 - Ждём ОТКАТ к EMA 50 или уровню поддержки/сопротивления.
 - Stop — за локальный минимум/максимум + буфер 0.5%.
@@ -33,7 +38,7 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
 
 
 def _extract_json(text: str) -> dict | None:
-    """Вытащить JSON из ответа модели."""
+    """Вытащить JSON из ответа модели, даже если он обрывается."""
     if not text:
         return None
 
@@ -44,17 +49,27 @@ def _extract_json(text: str) -> dict | None:
             text = text[4:]
         text = text.strip()
 
+    # Прямая попытка
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
+    # Ищем первую { ... } структуру
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
         try:
             return json.loads(match.group(0))
         except json.JSONDecodeError:
             pass
+
+    # Если JSON обрывается — достраиваем закрывающие скобки
+    if text.startswith("{"):
+        for closer in ["}", '"}', '"]}', '"}]}']:
+            try:
+                return json.loads(text + closer)
+            except json.JSONDecodeError:
+                continue
 
     return None
 
@@ -67,17 +82,17 @@ async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": market_data},
             ],
-            temperature=0.3,
-            max_tokens=500,
+            temperature=0.2,
+            max_tokens=1000,
         )
         content = response.choices[0].message.content
 
         parsed = _extract_json(content)
         if parsed is None:
-            return {"error": "Не удалось распарсить JSON", "raw": content[:100]}
+            return {"error": "Не удалось распарсить JSON", "raw": content[:150]}
 
         return parsed
 
     except Exception as e:
-        return {"error": str(e)[:100]}
+        return {"error": str(e)[:150]}
     
