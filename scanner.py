@@ -6,7 +6,6 @@ from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI
 from telegram import Bot
 from config import CHANNEL_ID
 
-# Список монет + их ID на CoinGecko
 COINS = {
     "BTC/USDT": "bitcoin",
     "ETH/USDT": "ethereum",
@@ -26,11 +25,85 @@ COINS = {
 }
 
 async def get_prices():
-    """Получаем актуальные цены с CoinGecko"""
     ids = ",".join(COINS.values())
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd"
     
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    return await resp.json()
+    except Exception as e:
+        print(f"Ошибка получения цен: {e}")
+    return {}
+
+async def scan_once(bot: Bot):
+    prices = await get_prices()
+    print(f"Сканируем {len(COINS)} монет (только скальп)...")
+
+    meta = TRADE_TYPES["scalp"]
+
+    for symbol, gecko_id in COINS.items():
+        try:
+            price_data = prices.get(gecko_id, {})
+            current_price = price_data.get("usd")
+
+            if not current_price:
+                print(f"Нет цены для {symbol}")
+                continue
+
+            market_data = (
+                f"Монета: {symbol}\n"
+                f"Текущая цена: ${current_price}\n"
+                f"Таймфрейм: {meta['tf']}\n"
+                f"Сделай скальп-анализ. Entry, Stop и Take указывай относительно текущей цены ${current_price}."
+            )
+
+            result = analyze_coin(symbol, meta["tf"], market_data)
+
+            if "error" in result:
+                print(f"Ошибка анализа {symbol}: {result['error']}")
+                continue
+
+            rr = float(result.get("rr", 0))
+            if not (MIN_RR <= rr <= MAX_RR):
+                continue
+
+            data = {
+                "symbol": symbol,
+                "trade_type": "scalp",
+                "side": result.get("side", "LONG"),
+                "entry": result.get("entry", 0),
+                "stop": result.get("stop", 0),
+                "take": result.get("take", 0),
+                "rr": rr,
+                "strength": result.get("strength", "medium"),
+                "reason": result.get("reason", "")
+            }
+
+            save_signal(data)
+
+            emoji = SIGNAL_EMOJI.get(result.get("strength", "medium"), "⚪")
+
+            text = (
+                f"{emoji} <b>{meta['name']} | {symbol}</b>\n\n"
+                f"Текущая цена: <code>${current_price}</code>\n"
+                f"Направление: <b>{result.get('side')}</b>\n"
+                f"Вход: <code>{result.get('entry')}</code>\n"
+                f"Стоп: <code>{result.get('stop')}</code>\n"
+                f"Тейк: <code>{result.get('take')}</code>\n"
+                f"R:R = <b>1:{rr:.2f}</b>\n\n"
+                f"{result.get('reason')}"
+            )
+
+            if CHANNEL_ID:
+                try:
+                    await bot.send_message(CHANNEL_ID, text, parse_mode="HTML")
+                except Exception as e:
+                    print(f"Ошибка отправки в канал {symbol}: {e}")
+
+            await asyncio.sleep(5)
+
+        except Exception as e:
+            print(f"Ошибка {symbol}: {e}")
             
