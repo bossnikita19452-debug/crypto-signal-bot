@@ -33,11 +33,10 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
 
 
 def _extract_json(text: str) -> dict | None:
-    """Попытаться вытащить JSON из ответа модели."""
+    """Вытащить JSON из ответа модели."""
     if not text:
         return None
 
-    # Убираем markdown-обёртки ```json ... ```
     text = text.strip()
     if text.startswith("```"):
         text = text.split("```")[1]
@@ -45,13 +44,11 @@ def _extract_json(text: str) -> dict | None:
             text = text[4:]
         text = text.strip()
 
-    # Прямая попытка
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Ищем первую { ... } структуру
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
         try:
@@ -72,7 +69,6 @@ async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
             ],
             temperature=0.3,
             max_tokens=500,
-            response_format={"type": "json_object"},  # просим модель вернуть JSON
         )
         content = response.choices[0].message.content
 
@@ -84,3 +80,4 @@ async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
 
     except Exception as e:
         return {"error": str(e)[:100]}
+    
