@@ -6,9 +6,8 @@ from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI, CHANNEL_ID
 from telegram import Bot
 from stats_checker import check_open_signals
 
-# Расширенный список монет (до 40)
 COINS = {
-    # Топ-10 по капитализации
+    # Топ-10
     "BTC/USDT": "bitcoin",
     "ETH/USDT": "ethereum",
     "BNB/USDT": "binancecoin",
@@ -19,8 +18,7 @@ COINS = {
     "ADA/USDT": "cardano",
     "AVAX/USDT": "avalanche-2",
     "LINK/USDT": "chainlink",
-
-    # Перспективные Layer 1 / Layer 2
+    # Layer 1 / Layer 2
     "SUI/USDT": "sui",
     "TON/USDT": "the-open-network",
     "ARB/USDT": "arbitrum",
@@ -31,7 +29,6 @@ COINS = {
     "DOT/USDT": "polkadot",
     "SEI/USDT": "sei-network",
     "INJ/USDT": "injective-protocol",
-
     # DeFi и инфраструктура
     "AAVE/USDT": "aave",
     "UNI/USDT": "uniswap",
@@ -43,8 +40,7 @@ COINS = {
     "WIF/USDT": "dogwifcoin",
     "PEPE/USDT": "pepe",
     "SHIB/USDT": "shiba-inu",
-
-    # Высоковолатильные и трендовые
+    # Волатильные / трендовые
     "HYPE/USDT": "hyperliquid",
     "ZEC/USDT": "zcash",
     "XMR/USDT": "monero",
@@ -93,8 +89,14 @@ async def scan_once(bot: Bot):
 
             result = await analyze_coin(symbol, meta["tf"], market_data)
 
+            # Обработка ошибок ИИ
             if "error" in result:
-                print(f"Ошибка анализа {symbol}: {result['error']}")
+                err = str(result["error"])
+                if "429" in err or "rate" in err.lower():
+                    print(f"⚠️ {symbol}: лимит Groq, пауза 10 сек")
+                    await asyncio.sleep(10)
+                else:
+                    print(f"Ошибка анализа {symbol}: {err}")
                 continue
 
             side = result.get("side", "NONE")
@@ -137,7 +139,8 @@ async def scan_once(bot: Bot):
                 except Exception as e:
                     print(f"Ошибка отправки {symbol}: {e}")
 
-            await asyncio.sleep(2)
+            # Пауза 5 секунд между монетами — защита от 429
+            await asyncio.sleep(5)
 
         except Exception as e:
             print(f"Ошибка {symbol}: {e}")
