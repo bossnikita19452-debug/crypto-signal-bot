@@ -7,6 +7,9 @@ from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI, CHANNEL_ID
 from telegram import Bot
 from stats_checker import check_open_signals
 
+# Минимальное расстояние от входа до стопа (в процентах)
+MIN_STOP_PCT = 1.5
+
 COINS = {
     "BTC/USDT": "bitcoin",
     "ETH/USDT": "ethereum",
@@ -80,7 +83,6 @@ async def scan_once(bot: Bot):
             return
 
         try:
-            # Пропускаем монеты, по которым уже есть активный сигнал
             if has_active_signal(symbol):
                 print(f"⏳ {symbol}: уже есть активный сигнал — пропускаем")
                 continue
@@ -119,11 +121,17 @@ async def scan_once(bot: Bot):
             entry = result.get("entry", 0)
             stop = result.get("stop", 0)
 
-            if entry and stop and entry > stop:
-                stop_pct = (entry - stop) / entry * 100
-                leverage = round(100 / stop_pct) if stop_pct > 0 else 1
-            else:
-                leverage = 1
+            if not entry or not stop or entry <= 0 or stop <= 0:
+                continue
+
+            # Проверка минимального расстояния до стопа
+            stop_pct = abs(entry - stop) / entry * 100
+            if stop_pct < MIN_STOP_PCT:
+                print(f"⛔ {symbol}: стоп слишком близко ({stop_pct:.2f}% < {MIN_STOP_PCT}%) — пропускаем")
+                continue
+
+            # Плечо считается по формуле (без ограничений)
+            leverage = round(100 / stop_pct) if stop_pct > 0 else 1
 
             data = {
                 "symbol": symbol,
@@ -148,7 +156,8 @@ async def scan_once(bot: Bot):
                 f"Стоп: <code>{stop}</code>\n"
                 f"Тейк: <code>{result.get('take')}</code>\n"
                 f"R:R = <b>1:{rr:.2f}</b>\n"
-                f"⚡ Плечо: <b>{leverage}x</b> (стоп = 100% маржи)\n\n"
+                f"⚡ Плечо: <b>{leverage}x</b> (стоп = 100% маржи)\n"
+                f"📏 Стоп: <b>{stop_pct:.2f}%</b> от входа\n\n"
                 f"{result.get('reason')}"
             )
 
