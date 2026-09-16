@@ -5,6 +5,7 @@ from database import save_signal
 from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI
 from telegram import Bot
 from config import CHANNEL_ID
+from stats_checker import check_open_signals
 
 COINS = {
     "BTC/USDT": "bitcoin",
@@ -24,10 +25,11 @@ COINS = {
     "AKE/USDT": "akedo",
 }
 
+
 async def get_prices():
     ids = ",".join(COINS.values())
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd"
-    
+
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
@@ -36,6 +38,7 @@ async def get_prices():
     except Exception as e:
         print(f"Ошибка получения цен: {e}")
     return {}
+
 
 async def scan_once(bot: Bot):
     prices = await get_prices()
@@ -105,4 +108,7 @@ async def scan_once(bot: Bot):
             await asyncio.sleep(5)
 
         except Exception as e:
-            print(f"Ошибка {symbol}: {e}")        
+            print(f"Ошибка {symbol}: {e}")
+
+    # Проверяем статусы открытых сделок после каждого сканирования
+    await check_open_signals()
