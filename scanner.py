@@ -2,13 +2,12 @@ import asyncio
 import aiohttp
 import config
 from analyzer import analyze_coin
-from database import save_signal
+from database import save_signal, has_active_signal
 from config import MIN_RR, MAX_RR, TRADE_TYPES, SIGNAL_EMOJI, CHANNEL_ID
 from telegram import Bot
 from stats_checker import check_open_signals
 
 COINS = {
-    # Топ-10
     "BTC/USDT": "bitcoin",
     "ETH/USDT": "ethereum",
     "BNB/USDT": "binancecoin",
@@ -19,7 +18,6 @@ COINS = {
     "ADA/USDT": "cardano",
     "AVAX/USDT": "avalanche-2",
     "LINK/USDT": "chainlink",
-    # Layer 1 / Layer 2
     "SUI/USDT": "sui",
     "TON/USDT": "the-open-network",
     "ARB/USDT": "arbitrum",
@@ -30,7 +28,6 @@ COINS = {
     "DOT/USDT": "polkadot",
     "SEI/USDT": "sei-network",
     "INJ/USDT": "injective-protocol",
-    # DeFi и инфраструктура
     "AAVE/USDT": "aave",
     "UNI/USDT": "uniswap",
     "LDO/USDT": "lido-dao",
@@ -41,7 +38,6 @@ COINS = {
     "WIF/USDT": "dogwifcoin",
     "PEPE/USDT": "pepe",
     "SHIB/USDT": "shiba-inu",
-    # Волатильные / трендовые
     "HYPE/USDT": "hyperliquid",
     "ZEC/USDT": "zcash",
     "XMR/USDT": "monero",
@@ -80,10 +76,15 @@ async def scan_once(bot: Bot):
 
     for symbol, gecko_id in COINS.items():
         if not config.SCANNING_ENABLED:
-            print("⏸ Сканирование остановлено пользователем (в процессе)")
+            print("⏸ Сканирование остановлено (в процессе)")
             return
 
         try:
+            # Пропускаем монеты, по которым уже есть активный сигнал
+            if has_active_signal(symbol):
+                print(f"⏳ {symbol}: уже есть активный сигнал — пропускаем")
+                continue
+
             price_data = prices.get(gecko_id, {})
             current_price = price_data.get("usd")
             if not current_price:
@@ -118,7 +119,6 @@ async def scan_once(bot: Bot):
             entry = result.get("entry", 0)
             stop = result.get("stop", 0)
 
-            # Расчёт плеча для стопа = 100% маржи
             if entry and stop and entry > stop:
                 stop_pct = (entry - stop) / entry * 100
                 leverage = round(100 / stop_pct) if stop_pct > 0 else 1
@@ -163,6 +163,5 @@ async def scan_once(bot: Bot):
         except Exception as e:
             print(f"Ошибка {symbol}: {e}")
 
-    # После сканирования проверяем открытые сделки и отправляем уведомления
     await check_open_signals(chat_id=CHANNEL_ID)
 
