@@ -10,18 +10,19 @@ COINS = {
     "BTC/USDT": "bitcoin",
     "ETH/USDT": "ethereum",
     "SOL/USDT": "solana",
-    "BNB/USDT": "binancecoin",
     "XRP/USDT": "ripple",
-    "DOGE/USDT": "dogecoin",
-    "ADA/USDT": "cardano",
     "AVAX/USDT": "avalanche-2",
-    "DOT/USDT": "polkadot",
-    "LINK/USDT": "chainlink",
+    "AAVE/USDT": "aave",
+    "ARB/USDT": "arbitrum",
     "TON/USDT": "the-open-network",
-    "TRX/USDT": "tron",
-    "NEAR/USDT": "near",
-    "APT/USDT": "aptos",
-    "SUI/USDT": "sui"
+    "SUI/USDT": "sui",
+    "XMR/USDT": "monero",
+    "ZEC/USDT": "zcash",
+    "PEPE/USDT": "pepe",
+    "INJ/USDT": "injective-protocol",
+    "HYPE/USDT": "hyperliquid",
+    "AKE/USDT": "akedo",
+}
 }
 
 async def get_prices():
