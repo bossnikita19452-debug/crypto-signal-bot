@@ -1,4 +1,4 @@
- import asyncio
+import asyncio
 import aiohttp
 from analyzer import analyze_coin
 from database import save_signal
