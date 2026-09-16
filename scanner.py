@@ -24,6 +24,7 @@ COINS = {
     "AKE/USDT": "akedo",
 }
 
+
 async def get_prices():
     ids = ",".join(COINS.values())
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd"
@@ -36,11 +37,12 @@ async def get_prices():
         print(f"Ошибка получения цен: {e}")
     return {}
 
+
 async def scan_once(bot: Bot):
     prices = await get_prices()
-    print(f"Сканируем {len(COINS)} монет (тренд, 4h)...")
+    print(f"Сканируем {len(COINS)} монет (тренд, 4ч)...")
 
-    meta = TRADE_TYPES["swing"]  # ← сменили скальп на среднесрок
+    meta = TRADE_TYPES["swing"]
 
     for symbol, gecko_id in COINS.items():
         try:
@@ -56,7 +58,7 @@ async def scan_once(bot: Bot):
                 f"Ищи трендовый сетап с откатом для среднесрочной торговли."
             )
 
-            result = analyze_coin(symbol, meta["tf"], market_data)
+            result = await analyze_coin(symbol, meta["tf"], market_data)
 
             if "error" in result:
                 print(f"Ошибка анализа {symbol}: {result['error']}")
@@ -102,7 +104,7 @@ async def scan_once(bot: Bot):
                 except Exception as e:
                     print(f"Ошибка отправки {symbol}: {e}")
 
-            await asyncio.sleep(2)  # пауза меньше, так как запросов реже
+            await asyncio.sleep(2)
 
         except Exception as e:
             print(f"Ошибка {symbol}: {e}")
