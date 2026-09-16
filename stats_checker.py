@@ -11,12 +11,48 @@ EXPIRY = {
     "longterm": timedelta(days=35),
 }
 
+
+# Расширенный список ID CoinGecko (синхронизирован с scanner.py)
 COIN_IDS = {
-    "BTC/USDT": "bitcoin", "ETH/USDT": "ethereum", "SOL/USDT": "solana",
-    "XRP/USDT": "ripple", "AVAX/USDT": "avalanche-2", "AAVE/USDT": "aave",
-    "ARB/USDT": "arbitrum", "TON/USDT": "the-open-network", "SUI/USDT": "sui",
-    "XMR/USDT": "monero", "ZEC/USDT": "zcash", "PEPE/USDT": "pepe",
-    "INJ/USDT": "injective-protocol", "HYPE/USDT": "hyperliquid",
+    "BTC/USDT": "bitcoin",
+    "ETH/USDT": "ethereum",
+    "BNB/USDT": "binancecoin",
+    "XRP/USDT": "ripple",
+    "SOL/USDT": "solana",
+    "TRX/USDT": "tron",
+    "DOGE/USDT": "dogecoin",
+    "ADA/USDT": "cardano",
+    "AVAX/USDT": "avalanche-2",
+    "LINK/USDT": "chainlink",
+    "SUI/USDT": "sui",
+    "TON/USDT": "the-open-network",
+    "ARB/USDT": "arbitrum",
+    "OP/USDT": "optimism",
+    "APT/USDT": "aptos",
+    "NEAR/USDT": "near",
+    "ATOM/USDT": "cosmos",
+    "DOT/USDT": "polkadot",
+    "SEI/USDT": "sei-network",
+    "INJ/USDT": "injective-protocol",
+    "AAVE/USDT": "aave",
+    "UNI/USDT": "uniswap",
+    "LDO/USDT": "lido-dao",
+    "CRV/USDT": "curve-dao-token",
+    "PENDLE/USDT": "pendle",
+    "JUP/USDT": "jupiter-exchange-solana",
+    "PYTH/USDT": "pyth-network",
+    "WIF/USDT": "dogwifcoin",
+    "PEPE/USDT": "pepe",
+    "SHIB/USDT": "shiba-inu",
+    "HYPE/USDT": "hyperliquid",
+    "ZEC/USDT": "zcash",
+    "XMR/USDT": "monero",
+    "FIL/USDT": "filecoin",
+    "ICP/USDT": "internet-computer",
+    "RNDR/USDT": "render-token",
+    "FET/USDT": "fetch-ai",
+    "TAO/USDT": "bittensor",
+    "AKT/USDT": "akash-network",
     "AKE/USDT": "akedo",
 }
 
@@ -45,7 +81,7 @@ async def check_open_signals():
     now = datetime.utcnow()
 
     for s in signals:
-        # Индексы соответствуют структуре таблицы signals:
+        # Индексы таблицы signals:
         # 0=id, 1=symbol, 2=trade_type, 3=side, 4=entry, 5=stop, 6=take,
         # 7=rr, 8=strength, 9=reason, 10=created_at, 11=status
         sig_id = s[0]
