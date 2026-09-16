@@ -3,7 +3,6 @@ import aiohttp
 
 from database import get_active_signals, update_signal_status
 
-
 # Срок жизни сделки до пометки "expired"
 EXPIRY = {
     "scalp": timedelta(hours=2),
@@ -11,8 +10,7 @@ EXPIRY = {
     "longterm": timedelta(days=35),
 }
 
-
-# Расширенный список ID CoinGecko (синхронизирован с scanner.py)
+# ID CoinGecko для монет
 COIN_IDS = {
     "BTC/USDT": "bitcoin",
     "ETH/USDT": "ethereum",
@@ -56,6 +54,14 @@ COIN_IDS = {
     "AKE/USDT": "akedo",
 }
 
+# Глобальная ссылка на бота (устанавливается извне)
+_bot = None
+
+def set_bot(bot):
+    """Установить экземпляр бота для отправки уведомлений."""
+    global _bot
+    _bot = bot
+
 
 async def _get_prices():
     ids = ",".join(set(COIN_IDS.values()))
@@ -70,8 +76,21 @@ async def _get_prices():
     return {}
 
 
-async def check_open_signals():
-    """Проверить все активные сделки и обновить статусы."""
+async def _notify(chat_id, text: str):
+    """Отправить уведомление в Telegram."""
+    if _bot is None or not chat_id:
+        return
+    try:
+        await _bot.send_message(chat_id, text, parse_mode="HTML")
+    except Exception as e:
+        print(f"Ошибка уведомления: {e}")
+
+
+async def check_open_signals(chat_id=None):
+    """
+    Проверить активные сделки и обновить статусы.
+    chat_id — куда отправлять уведомления (если None — не отправлять).
+    """
     signals = get_active_signals(limit=100)
     if not signals:
         print("Нет активных сделок для проверки")
@@ -81,15 +100,16 @@ async def check_open_signals():
     now = datetime.utcnow()
 
     for s in signals:
-        # Индексы таблицы signals:
-        # 0=id, 1=symbol, 2=trade_type, 3=side, 4=entry, 5=stop, 6=take,
+        # Индексы: 0=id, 1=symbol, 2=trade_type, 3=side, 4=entry, 5=stop, 6=take,
         # 7=rr, 8=strength, 9=reason, 10=created_at, 11=status
         sig_id = s[0]
         symbol = s[1]
         trade_type = s[2]
+        side = s[3]
         entry = s[4]
         stop = s[5]
         take = s[6]
+        rr = s[7]
         created_at = datetime.fromisoformat(s[10])
 
         gecko_id = COIN_IDS.get(symbol)
@@ -103,17 +123,49 @@ async def check_open_signals():
         # Проверка TP
         if current >= take:
             update_signal_status(sig_id, "win", current)
-            print(f"✅ {symbol} закрыт по TP: {current} (вход {entry})")
+            profit_pct = (current - entry) / entry * 100
+            msg = (
+                f"✅ <b>ТЕЙК ПРОФИТ СРАБОТАЛ</b>\n\n"
+                f"Монета: <b>{symbol}</b>\n"
+                f"Направление: {side}\n"
+                f"Вход: <code>{entry}</code>\n"
+                f"Тейк: <code>{take}</code>\n"
+                f"Текущая цена: <code>{current}</code>\n"
+                f"Профит: <b>+{profit_pct:.2f}%</b>\n"
+                f"R:R: 1:{rr:.2f}"
+            )
+            print(f"✅ {symbol} закрыт по TP: {current}")
+            await _notify(chat_id, msg)
             continue
 
         # Проверка SL
         if current <= stop:
             update_signal_status(sig_id, "loss", current)
-            print(f"❌ {symbol} закрыт по SL: {current} (вход {entry})")
+            loss_pct = (current - entry) / entry * 100
+            msg = (
+                f"❌ <b>СТОП ЛОСС СРАБОТАЛ</b>\n\n"
+                f"Монета: <b>{symbol}</b>\n"
+                f"Направление: {side}\n"
+                f"Вход: <code>{entry}</code>\n"
+                f"Стоп: <code>{stop}</code>\n"
+                f"Текущая цена: <code>{current}</code>\n"
+                f"Убыток: <b>{loss_pct:.2f}%</b>"
+            )
+            print(f"❌ {symbol} закрыт по SL: {current}")
+            await _notify(chat_id, msg)
             continue
 
         # Проверка срока
         expiry = EXPIRY.get(trade_type, timedelta(days=4))
         if now - created_at > expiry:
             update_signal_status(sig_id, "expired", current)
-            print(f"⏰ {symbol} истёк: {current} (вход {entry})")
+            msg = (
+                f"⏰ <b>СДЕЛКА ИСТЕКЛА</b>\n\n"
+                f"Монета: <b>{symbol}</b>\n"
+                f"Направление: {side}\n"
+                f"Вход: <code>{entry}</code>\n"
+                f"Текущая цена: <code>{current}</code>\n"
+                f"Прошло больше {expiry.days} дн."
+            )
+            print(f"⏰ {symbol} истёк: {current}")
+            await _notify(chat_id, msg)
