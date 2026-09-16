@@ -32,13 +32,14 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
 - Ищем ТРЕНД на 4-часовом таймфрейме (цена выше/ниже EMA 200).
 - Ждём ОТКАТ к EMA 50 или уровню поддержки/сопротивления.
 - Stop — за локальный минимум/максимум + буфер 0.5%.
+- **ВАЖНО: расстояние от входа до стопа должно быть НЕ МЕНЬШЕ 1.5% от цены входа.**
+  Если получается меньше 1.5% — расширь стоп до минимум 1.5%.
 - Take = минимум 1.5R, максимум 3R.
 - Если чёткого тренда с откатом нет — верни side: "NONE".
 """
 
 
 def _extract_json(text: str) -> dict | None:
-    """Вытащить JSON из ответа модели, даже если он обрывается."""
     if not text:
         return None
 
@@ -49,13 +50,11 @@ def _extract_json(text: str) -> dict | None:
             text = text[4:]
         text = text.strip()
 
-    # Прямая попытка
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Ищем первую { ... } структуру
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
         try:
@@ -63,7 +62,6 @@ def _extract_json(text: str) -> dict | None:
         except json.JSONDecodeError:
             pass
 
-    # Если JSON обрывается — достраиваем закрывающие скобки
     if text.startswith("{"):
         for closer in ["}", '"}', '"]}', '"}]}']:
             try:
