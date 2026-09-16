@@ -4,6 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+import config
 from config import TELEGRAM_BOT_TOKEN, ADMIN_IDS, CHANNEL_ID
 from database import init_db, get_active_signals, get_recent_signals, get_stats
 from scanner import scan_once
@@ -42,7 +43,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
 
     if data == "btc_day":
-        result = analyze_coin("BTC/USDT", "4h", "Текущий анализ Bitcoin")
+        result = await analyze_coin("BTC/USDT", "4h", "Текущий анализ Bitcoin")
         text = f"₿ <b>Биткоин дня</b>\n\n{result.get('reason', 'Нет данных')}"
         await query.edit_message_text(text, parse_mode="HTML")
 
@@ -95,8 +96,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id not in ADMIN_IDS:
             await query.edit_message_text("Доступ запрещён.")
             return
+        status = "▶️ Активно" if config.SCANNING_ENABLED else "⏸ Остановлено"
+        toggle_text = "⏸ Остановить сканирование" if config.SCANNING_ENABLED else "▶️ Возобновить сканирование"
         keyboard = [
-            [InlineKeyboardButton("🔄 Запустить сканер", callback_data="force_scan")],
+            [InlineKeyboardButton(f"Сканер: {status}", callback_data="noop")],
+            [InlineKeyboardButton(toggle_text, callback_data="toggle_scan")],
+            [InlineKeyboardButton("🔄 Запустить сканер сейчас", callback_data="force_scan")],
             [InlineKeyboardButton("🔍 Проверить сделки", callback_data="check_trades")],
             [InlineKeyboardButton("« Назад", callback_data="back_main")]
         ]
@@ -104,6 +109,30 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚙️ Панель управления",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+    elif data == "toggle_scan":
+        if user_id not in ADMIN_IDS:
+            return
+        config.SCANNING_ENABLED = not config.SCANNING_ENABLED
+        status = "▶️ активно" if config.SCANNING_ENABLED else "⏸ остановлено"
+        await query.answer(f"Сканирование {status}")
+        # Обновить меню
+        status_label = "▶️ Активно" if config.SCANNING_ENABLED else "⏸ Остановлено"
+        toggle_text = "⏸ Остановить сканирование" if config.SCANNING_ENABLED else "▶️ Возобновить сканирование"
+        keyboard = [
+            [InlineKeyboardButton(f"Сканер: {status_label}", callback_data="noop")],
+            [InlineKeyboardButton(toggle_text, callback_data="toggle_scan")],
+            [InlineKeyboardButton("🔄 Запустить сканер сейчас", callback_data="force_scan")],
+            [InlineKeyboardButton("🔍 Проверить сделки", callback_data="check_trades")],
+            [InlineKeyboardButton("« Назад", callback_data="back_main")]
+        ]
+        await query.edit_message_text(
+            "⚙️ Панель управления",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data == "noop":
+        await query.answer()
 
     elif data == "force_scan":
         if user_id not in ADMIN_IDS:
@@ -134,9 +163,7 @@ async def main():
     app.add_handler(CallbackQueryHandler(button_handler))
 
     scheduler = AsyncIOScheduler()
-    # Сканер раз в час
     scheduler.add_job(scan_once, "interval", hours=1, args=[app.bot])
-    # Проверка статусов сделок — каждые 30 минут
     scheduler.add_job(check_open_signals, "interval", minutes=30)
     scheduler.start()
 
