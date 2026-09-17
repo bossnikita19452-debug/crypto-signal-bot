@@ -5,4 +5,5 @@ apscheduler==3.10.4
 aiohttp==3.10.10
 feedparser==6.0.11
 pandas==2.2.3
+pandas-ta-classic
 freeflow-llm
