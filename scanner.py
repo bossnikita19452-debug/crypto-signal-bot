@@ -87,7 +87,8 @@ COINS = {
     "NEO/USDT": "neo",
 }
 
-def _get_current_group() -> list[str]:
+
+def _get_current_group() -> list:
     all_symbols = list(COINS.keys())
     if not USE_GROUPS or NUM_GROUPS <= 1:
         return all_symbols
@@ -99,7 +100,8 @@ def _get_current_group() -> list[str]:
         return all_symbols[start:]
     return all_symbols[start:start + group_size]
 
-async def get_prices(symbols: list[str]):
+
+async def get_prices(symbols: list):
     ids = ",".join(COINS[s] for s in symbols if s in COINS)
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd"
     try:
@@ -110,6 +112,7 @@ async def get_prices(symbols: list[str]):
     except Exception as e:
         print(f"Ошибка получения цен: {e}")
     return {}
+
 
 async def scan_once(bot: Bot):
     if not config.SCANNING_ENABLED:
@@ -154,7 +157,7 @@ async def scan_once(bot: Bot):
             if "error" in result:
                 err = str(result["error"])
                 if "429" in err or "rate" in err.lower():
-                    print(f"⚠️ {symbol}: лимит Groq, пауза 10 сек")
+                    print(f"⚠️ {symbol}: лимит ИИ, пауза 10 сек")
                     await asyncio.sleep(10)
                 else:
                     print(f"Ошибка анализа {symbol}: {err}")
@@ -164,7 +167,6 @@ async def scan_once(bot: Bot):
             if side == "NONE":
                 continue
 
-            # МЫ ПРИНУДИТЕЛЬНО БЕРЁМ ТЕКУЩУЮ ЦЕНУ КАК ВХОД
             entry = current_price
             stop = result.get("stop", 0)
             take = result.get("take", 0)
@@ -172,7 +174,6 @@ async def scan_once(bot: Bot):
             if not stop or not take:
                 continue
 
-            # Пересчитываем RR на основе текущей цены входа
             risk = abs(entry - stop)
             reward = abs(take - entry)
             if risk <= 0:
@@ -223,8 +224,7 @@ async def scan_once(bot: Bot):
                 except Exception as e:
                     print(f"Ошибка отправки {symbol}: {e}")
 
-               await asyncio.sleep(7)
-
+            await asyncio.sleep(7)
 
         except Exception as e:
             print(f"Ошибка {symbol}: {e}")
