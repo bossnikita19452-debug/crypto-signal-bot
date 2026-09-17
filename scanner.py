@@ -223,7 +223,8 @@ async def scan_once(bot: Bot):
                 except Exception as e:
                     print(f"Ошибка отправки {symbol}: {e}")
 
-            await asyncio.sleep(5)
+               await asyncio.sleep(7)
+
 
         except Exception as e:
             print(f"Ошибка {symbol}: {e}")
