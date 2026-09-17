@@ -21,6 +21,7 @@ def init_db():
             reason TEXT,
             created_at TEXT,
             status TEXT DEFAULT 'active',
+            triggered INTEGER DEFAULT 0,
             result_price REAL,
             closed_at TEXT
         )
@@ -34,6 +35,11 @@ def init_db():
             changed_at TEXT
         )
     """)
+    # Миграция: если таблица старая и поля нет — добавим
+    try:
+        c.execute("ALTER TABLE signals ADD COLUMN triggered INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -56,7 +62,6 @@ def save_signal(data: dict) -> int:
 
 
 def has_active_signal(symbol: str) -> bool:
-    """Есть ли по этой монете незакрытый сигнал (status='active')."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
@@ -68,8 +73,7 @@ def has_active_signal(symbol: str) -> bool:
     return count > 0
 
 
-def get_active_signals(limit=20):
-    """Все открытые сделки (status='active')."""
+def get_active_signals(limit=100):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
@@ -82,7 +86,6 @@ def get_active_signals(limit=20):
 
 
 def get_recent_signals(limit=10):
-    """Последние сигналы (включая закрытые)."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM signals ORDER BY id DESC LIMIT ?", (limit,))
@@ -91,8 +94,16 @@ def get_recent_signals(limit=10):
     return rows
 
 
+def mark_triggered(signal_id: int):
+    """Отметить, что вход был активирован."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE signals SET triggered = 1 WHERE id = ?", (signal_id,))
+    conn.commit()
+    conn.close()
+
+
 def update_signal_status(signal_id: int, status: str, result_price: float = None):
-    """Закрыть сделку: win / loss / expired."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("""
@@ -105,12 +116,14 @@ def update_signal_status(signal_id: int, status: str, result_price: float = None
 
 
 def get_stats() -> dict:
-    """Собрать статистику по всем сделкам."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    stats = {"total": 0, "win": 0, "loss": 0, "expired": 0, "active": 0,
-             "by_type": {}, "avg_rr": 0.0}
+    stats = {
+        "total": 0, "win": 0, "loss": 0, "expired": 0,
+        "active": 0, "not_triggered": 0,
+        "by_type": {}, "avg_rr": 0.0,
+    }
 
     c.execute("SELECT COUNT(*), AVG(rr) FROM signals")
     row = c.fetchone()
@@ -126,17 +139,19 @@ def get_stats() -> dict:
         SELECT trade_type,
                COUNT(*),
                SUM(CASE WHEN status='win' THEN 1 ELSE 0 END),
-               SUM(CASE WHEN status='loss' THEN 1 ELSE 0 END)
+               SUM(CASE WHEN status='loss' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN status='not_triggered' THEN 1 ELSE 0 END)
         FROM signals
         GROUP BY trade_type
     """)
-    for ttype, total, wins, losses in c.fetchall():
+    for ttype, total, wins, losses, not_trig in c.fetchall():
         closed = wins + losses
         winrate = round(wins / closed * 100, 1) if closed > 0 else 0.0
         stats["by_type"][ttype] = {
             "total": total,
             "win": wins,
             "loss": losses,
+            "not_triggered": not_trig,
             "winrate": winrate,
         }
 
