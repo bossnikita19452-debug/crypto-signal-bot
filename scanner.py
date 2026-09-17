@@ -17,7 +17,7 @@ from config import (
 )
 from telegram import Bot
 from stats_checker import check_open_signals
-from news_scanner import get_news_for_coin, get_fear_greed
+from news import get_news_for_coin, get_fear_greed
 
 COINS = {
     "BTC/USDT": "bitcoin", "ETH/USDT": "ethereum", "BNB/USDT": "binancecoin",
@@ -92,7 +92,6 @@ async def scan_once(bot: Bot):
     meta = TRADE_TYPES["swing"]
 
     async with aiohttp.ClientSession() as session:
-        # Fear & Greed — один раз на весь цикл
         fg = await get_fear_greed(session)
         fg_text = f"Fear & Greed: {fg.get('value', 50)} ({fg.get('classification', 'Neutral')})"
 
@@ -113,7 +112,6 @@ async def scan_once(bot: Bot):
                 if not current_price:
                     continue
 
-                # ─── Новости ──────────────────────────────────────
                 news = await get_news_for_coin(session, symbol, limit=5)
                 news_text = "\n".join(f"- {h}" for h in news) if news else "Новостей нет."
 
@@ -147,7 +145,6 @@ async def scan_once(bot: Bot):
                 if not stop or not take:
                     continue
 
-                # ─── Проверка RR ────────────────────────────────
                 risk = abs(entry - stop)
                 reward = abs(take - entry)
                 if risk <= 0:
@@ -159,11 +156,6 @@ async def scan_once(bot: Bot):
                 stop_pct = abs(entry - stop) / entry * 100
                 if stop_pct < MIN_STOP_PCT:
                     continue
-
-                # ─── MTF-проверка (1h) ──────────────────────────
-                # Пропускаем, если 1h противоречит 4h (упрощённо: проверяем через ИИ-промпт)
-                # Здесь можно добавить запрос свечей 1h, но для экономии запросов
-                # оставляем на ИИ: если он подтвердил сетап на 4h — считаем валидным.
 
                 leverage = round(100 / stop_pct) if stop_pct > 0 else 1
 
