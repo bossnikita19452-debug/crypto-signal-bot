@@ -1,12 +1,6 @@
 import json
 import re
-from openai import AsyncOpenAI
-from config import GROQ_API_KEY, GROQ_MODEL
-
-client = AsyncOpenAI(
-    base_url="https://api.groq.com/openai/v1",
-    api_key=GROQ_API_KEY,
-)
+from freeflow_llm import FreeFlowClient, NoProvidersAvailableError
 
 SYSTEM_PROMPT = """Ты — профессиональный крипто-аналитик, работающий с трендовыми стратегиями.
 
@@ -32,7 +26,7 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
 - Ищем ТРЕНД на 4-часовом таймфрейме (цена выше/ниже EMA 200).
 - Ждём ОТКАТ к EMA 50 или уровню поддержки/сопротивления.
 - Stop — за локальный минимум/максимум + буфер 0.5%.
-- **ВАЖНО: расстояние от входа до стопа должно быть НЕ МЕНЬШЕ 1.5% от цены входа.**
+- ВАЖНО: расстояние от входа до стопа должно быть НЕ МЕНЬШЕ 1.5% от цены входа.
   Если получается меньше 1.5% — расширь стоп до минимум 1.5%.
 - Take = минимум 1.5R, максимум 3R.
 - Если чёткого тренда с откатом нет — верни side: "NONE".
@@ -74,16 +68,16 @@ def _extract_json(text: str) -> dict | None:
 
 async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
     try:
-        response = await client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": market_data},
-            ],
-            temperature=0.2,
-            max_tokens=1000,
-        )
-        content = response.choices[0].message.content
+        with FreeFlowClient() as client:
+            response = client.chat(
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": market_data},
+                ],
+                temperature=0.2,
+                max_tokens=1000,
+            )
+        content = response.content
 
         parsed = _extract_json(content)
         if parsed is None:
@@ -91,6 +85,8 @@ async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
 
         return parsed
 
+    except NoProvidersAvailableError:
+        return {"error": "Все провайдеры ИИ исчерпали лимиты"}
     except Exception as e:
         return {"error": str(e)[:150]}
     
