@@ -34,7 +34,7 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
 """
 
 
-def _extract_json(text: str) -> dict | None:
+def _extract_json(text):
     if not text:
         return None
 
@@ -51,7 +51,7 @@ def _extract_json(text: str) -> dict | None:
         pass
 
     match = re.search(r"\{.*\}", text, re.DOTALL)
-    if                match:
+    if match:
         try:
             return json.loads(match.group(0))
         except json.JSONDecodeError:
@@ -67,7 +67,7 @@ def _extract_json(text: str) -> dict | None:
     return None
 
 
-async def analyze_coin(symbol: str, market_data: str) -> dict:
+async def analyze_coin(symbol, market_data):
     try:
         with FreeFlowClient() as client:
             response = client.chat(
@@ -86,10 +86,9 @@ async def analyze_coin(symbol: str, market_data: str) -> dict:
         return parsed
 
     except NoProvidersAvailableError:
-        # Пробуем Gemini с актуальной моделью
         try:
             with FreeFlowClient() as client:
- response = client.chat(
+                response = client.chat(
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": market_data},
