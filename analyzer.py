@@ -2,7 +2,6 @@ import json
 import re
 from freeflow_llm import FreeFlowClient, NoProvidersAvailableError
 
-
 SYSTEM_PROMPT = """Ты — профессиональный крипто-аналитик, работающий с трендовыми стратегиями.
 
 Найди сетап для СРЕДНЕСРОЧНОЙ торговли (удержание от нескольких часов до нескольких дней).
@@ -11,8 +10,10 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
 {
   "side": "LONG" | "SHORT" | "NONE",
   "strength": "strong" | "medium" | "weak",
+  "entry": число,
   "stop": число,
   "take": число,
+  "rr": число,
   "reason": "краткое объяснение на русском"
 }
 
@@ -35,28 +36,33 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
 def _extract_json(text: str) -> dict | None:
     if not text:
         return None
+
     text = text.strip()
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
             text = text[4:]
         text = text.strip()
+
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
+
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
         try:
             return json.loads(match.group(0))
         except json.JSONDecodeError:
             pass
+
     if text.startswith("{"):
         for closer in ["}", '"}', '"]}', '"}]}']:
             try:
                 return json.loads(text + closer)
             except json.JSONDecodeError:
                 continue
+
     return None
 
 
@@ -77,7 +83,9 @@ async def analyze_coin(symbol: str, market_data: str) -> dict:
         if parsed is None:
             return {"error": "Не удалось распарсить JSON", "raw": content[:150]}
         return parsed
+
     except NoProvidersAvailableError:
+        # Пробуем Gemini с актуальной моделью
         try:
             with FreeFlowClient() as client:
                 response = client.chat(
