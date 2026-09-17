@@ -11,9 +11,9 @@ ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 # ─── CoinGecko ────────────────────────────────────────────────────
 COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY", "")
 
-# ─── Groq (ИИ) ────────────────────────────────────────────────────
+# ─── ИИ провайдеры (Groq + Gemini) ────────────────────────────────
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = "openai/gpt-oss-120b"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # ─── Параметры сканирования ───────────────────────────────────────
 SCAN_INTERVAL_HOURS = 1
