@@ -1,22 +1,49 @@
-import feedparser
 import aiohttp
 
-async def get_crypto_news(limit=8):
-    feeds = [
-        "https://cryptopanic.com/news/rss/",
-        "https://cointelegraph.com/rss",
-        "https://www.coindesk.com/arc/outboundfeeds/rss/"
-    ]
-    news = []
-    for url in feeds:
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:4]:
-                news.append({
-                    "title": entry.title,
-                    "link": entry.link,
-                    "source": feed.feed.get("title", "News")
-                })
-        except:
-            continue
-    return news[:limit]
+
+NEWS_BASE = "https://cryptocurrency.cv"
+FEAR_GREED_URL = "https://api.alternative.me/fng/"
+
+
+async def get_news_for_coin(session: aiohttp.ClientSession, symbol: str, limit: int = 5) -> list:
+    """Получить заголовки новостей по монете."""
+    coin = symbol.split("-")[0].upper()
+    if coin in ("USDT", "USDC", "BUSD", "DAI"):
+        return []
+
+    try:
+        url = f"{NEWS_BASE}/api/news"
+        params = {"q": coin, "limit": limit}
+        async with session.get(url, params=params, timeout=10) as resp:
+            if resp.status != 200:
+                return []
+            data = await resp.json()
+    except Exception:
+        return []
+
+    headlines = []
+    articles = data.get("articles", data.get("data", []))
+    for item in articles[:limit]:
+        title = item.get("title")
+        if title:
+            headlines.append(title)
+    return headlines
+
+
+async def get_fear_greed(session: aiohttp.ClientSession) -> dict:
+    """Получить Fear & Greed Index (0-100)."""
+    try:
+        async with session.get(FEAR_GREED_URL, timeout=10) as resp:
+            if resp.status != 200:
+                return {}
+            data = await resp.json()
+    except Exception:
+        return {}
+
+    if not data.get("data"):
+        return {}
+    item = data["data"][0]
+    return {
+        "value": int(item.get("value", 50)),
+        "classification": item.get("value_classification", "Neutral"),
+    }
