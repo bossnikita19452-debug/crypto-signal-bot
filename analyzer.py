@@ -2,6 +2,7 @@ import json
 import re
 from freeflow_llm import FreeFlowClient, NoProvidersAvailableError
 
+
 SYSTEM_PROMPT = """Ты — профессиональный крипто-аналитик, работающий с трендовыми стратегиями.
 
 Найди сетап для СРЕДНЕСРОЧНОЙ торговли (удержание от нескольких часов до нескольких дней).
@@ -50,7 +51,7 @@ def _extract_json(text: str) -> dict | None:
         pass
 
     match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
+    if                match:
         try:
             return json.loads(match.group(0))
         except json.JSONDecodeError:
@@ -88,7 +89,7 @@ async def analyze_coin(symbol: str, market_data: str) -> dict:
         # Пробуем Gemini с актуальной моделью
         try:
             with FreeFlowClient() as client:
-                response = client.chat(
+ response = client.chat(
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": market_data},
