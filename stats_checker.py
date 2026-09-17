@@ -1,16 +1,18 @@
 from datetime import datetime, timedelta
 import aiohttp
 
-from database import get_active_signals, update_signal_status
+from database import (
+    get_active_signals,
+    update_signal_status,
+    mark_triggered,
+)
 
-# Срок жизни сделки до пометки "expired"
 EXPIRY = {
     "scalp": timedelta(hours=2),
     "swing": timedelta(days=4),
     "longterm": timedelta(days=35),
 }
 
-# ID CoinGecko для монет
 COIN_IDS = {
     "BTC/USDT": "bitcoin",
     "ETH/USDT": "ethereum",
@@ -52,13 +54,42 @@ COIN_IDS = {
     "TAO/USDT": "bittensor",
     "AKT/USDT": "akash-network",
     "AKE/USDT": "akedo",
+    "ETC/USDT": "ethereum-classic",
+    "XLM/USDT": "stellar",
+    "ALGO/USDT": "algorand",
+    "VET/USDT": "vechain",
+    "HBAR/USDT": "hedera-hashgraph",
+    "EGLD/USDT": "elrond-erd-2",
+    "THETA/USDT": "theta-token",
+    "FLOW/USDT": "flow",
+    "MANA/USDT": "decentraland",
+    "SAND/USDT": "the-sandbox",
+    "AXS/USDT": "axie-infinity",
+    "GALA/USDT": "gala",
+    "IMX/USDT": "immutable-x",
+    "GMT/USDT": "stepn",
+    "APE/USDT": "apecoin",
+    "CHZ/USDT": "chiliz",
+    "1INCH/USDT": "1inch",
+    "COMP/USDT": "compound-governance-token",
+    "MKR/USDT": "maker",
+    "SNX/USDT": "havven",
+    "ZRX/USDT": "0x",
+    "BAT/USDT": "basic-attention-token",
+    "ENJ/USDT": "enjincoin",
+    "YFI/USDT": "yearn-finance",
+    "SUSHI/USDT": "sushi",
+    "KSM/USDT": "kusama",
+    "ZIL/USDT": "zilliqa",
+    "ONE/USDT": "harmony",
+    "IOTA/USDT": "iota",
+    "NEO/USDT": "neo",
 }
 
-# Глобальная ссылка на бота (устанавливается извне)
 _bot = None
 
+
 def set_bot(bot):
-    """Установить экземпляр бота для отправки уведомлений."""
     global _bot
     _bot = bot
 
@@ -77,7 +108,6 @@ async def _get_prices():
 
 
 async def _notify(chat_id, text: str):
-    """Отправить уведомление в Telegram."""
     if _bot is None or not chat_id:
         return
     try:
@@ -87,10 +117,6 @@ async def _notify(chat_id, text: str):
 
 
 async def check_open_signals(chat_id=None):
-    """
-    Проверить активные сделки и обновить статусы.
-    chat_id — куда отправлять уведомления (если None — не отправлять).
-    """
     signals = get_active_signals(limit=100)
     if not signals:
         print("Нет активных сделок для проверки")
@@ -101,7 +127,8 @@ async def check_open_signals(chat_id=None):
 
     for s in signals:
         # Индексы: 0=id, 1=symbol, 2=trade_type, 3=side, 4=entry, 5=stop, 6=take,
-        # 7=rr, 8=strength, 9=reason, 10=created_at, 11=status
+        # 7=rr, 8=strength, 9=reason, 10=created_at, 11=status,
+        # 12=triggered, 13=result_price, 14=closed_at
         sig_id = s[0]
         symbol = s[1]
         trade_type = s[2]
@@ -111,6 +138,7 @@ async def check_open_signals(chat_id=None):
         take = s[6]
         rr = s[7]
         created_at = datetime.fromisoformat(s[10])
+        triggered = s[12] if len(s) > 12 else 0
 
         gecko_id = COIN_IDS.get(symbol)
         if not gecko_id:
@@ -120,52 +148,74 @@ async def check_open_signals(chat_id=None):
         if not current:
             continue
 
-        # Проверка TP
-        if current >= take:
-            update_signal_status(sig_id, "win", current)
-            profit_pct = (current - entry) / entry * 100
-            msg = (
-                f"✅ <b>ТЕЙК ПРОФИТ СРАБОТАЛ</b>\n\n"
-                f"Монета: <b>{symbol}</b>\n"
-                f"Направление: {side}\n"
-                f"Вход: <code>{entry}</code>\n"
-                f"Тейк: <code>{take}</code>\n"
-                f"Текущая цена: <code>{current}</code>\n"
-                f"Профит: <b>+{profit_pct:.2f}%</b>\n"
-                f"R:R: 1:{rr:.2f}"
-            )
-            print(f"✅ {symbol} закрыт по TP: {current}")
-            await _notify(chat_id, msg)
-            continue
+        # ─── Проверяем, активирован ли вход ─────────────────────
+        # Для LONG: вход активирован, если цена опустилась до entry (или ниже)
+        # Для SHORT: вход активирован, если цена поднялась до entry (или выше)
+        if not triggered:
+            if side == "LONG" and current <= entry:
+                mark_triggered(sig_id)
+                triggered = 1
+                print(f"📥 {symbol}: вход активирован (${current} <= ${entry})")
+            elif side == "SHORT" and current >= entry:
+                mark_triggered(sig_id)
+                triggered = 1
+                print(f"📥 {symbol}: вход активирован (${current} >= ${entry})")
 
-        # Проверка SL
-        if current <= stop:
-            update_signal_status(sig_id, "loss", current)
-            loss_pct = (current - entry) / entry * 100
-            msg = (
-                f"❌ <b>СТОП ЛОСС СРАБОТАЛ</b>\n\n"
-                f"Монета: <b>{symbol}</b>\n"
-                f"Направление: {side}\n"
-                f"Вход: <code>{entry}</code>\n"
-                f"Стоп: <code>{stop}</code>\n"
-                f"Текущая цена: <code>{current}</code>\n"
-                f"Убыток: <b>{loss_pct:.2f}%</b>"
-            )
-            print(f"❌ {symbol} закрыт по SL: {current}")
-            await _notify(chat_id, msg)
-            continue
+        # ─── Проверяем TP/SL только если вход активирован ───────
+        if triggered:
+            if side == "LONG":
+                if current >= take:
+                    update_signal_status(sig_id, "win", current)
+                    profit_pct = (current - entry) / entry * 100
+                    msg = (
+                        f"✅ <b>ТЕЙК ПРОФИТ</b>\n\n"
+                        f"Монета: <b>{symbol}</b>\n"
+                        f"Направление: LONG\n"
+                        f"Вход: <code>{entry}</code>\n"
+                        f"Тейк: <code>{take}</code>\n"
+                        f"Текущая: <code>{current}</code>\n"
+                        f"Профит: <b>+{profit_pct:.2f}%</b>\n"
+                        f"R:R: 1:{rr:.2f}"
+                    )
+                    await _notify(chat_id, msg)
+                    continue
+                if current <= stop:
+                    update_signal_status(sig_id, "loss", current)
+                    loss_pct = (current - entry) / entry * 100
+                    msg = (
+                        f"❌ <b>СТОП ЛОСС</b>\n\n"
+                        f"Монета: <b>{symbol}</b>\n"
+                        f"Направление: LONG\n"
+                        f"Вход: <code>{entry}</code>\n"
+                        f"Стоп: <code>{stop}</code>\n"
+                        f"Текущая: <code>{current}</code>\n"
+                        f"Убыток: <b>{loss_pct:.2f}%</b>"
+                    )
+                    await _notify(chat_id, msg)
+                    continue
 
-        # Проверка срока
+        # ─── Проверка срока ─────────────────────────────────────
         expiry = EXPIRY.get(trade_type, timedelta(days=4))
         if now - created_at > expiry:
-            update_signal_status(sig_id, "expired", current)
-            msg = (
-                f"⏰ <b>СДЕЛКА ИСТЕКЛА</b>\n\n"
-                f"Монета: <b>{symbol}</b>\n"
-                f"Направление: {side}\n"
-                f"Вход: <code>{entry}</code>\n"
-                f"Текущая цена: <code>{current}</code>\n"
-                f"Прошло больше {expiry.days} дн."
-            )
-            print(f"⏰ {symbol} истёк: {current}")
-            await _notify(chat_id, msg)
+            if triggered:
+                # Вход был, но не дошли ни до TP, ни до SL — expired
+                update_signal_status(sig_id, "expired", current)
+                await _notify(
+                    chat_id,
+                    f"⏰ <b>СДЕЛКА ИСТЕКЛА</b>\n\n"
+                    f"Монета: <b>{symbol}</b>\n"
+                    f"Вход: <code>{entry}</code>\n"
+                    f"Текущая: <code>{current}</code>\n"
+                    f"Прошло больше {expiry.days} дн."
+                )
+            else:
+                # Вход так и не активировался — отдельный статус
+                update_signal_status(sig_id, "not_triggered", current)
+                await _notify(
+                    chat_id,
+                    f"⚪️ <b>ВХОД НЕ АКТИВИРОВАН</b>\n\n"
+                    f"Монета: <b>{symbol}</b>\n"
+                    f"Вход: <code>{entry}</code>\n"
+                    f"Текущая: <code>{current}</code>\n"
+                    f"Цена не дошла до входа за {expiry.days} дн."
+                )
