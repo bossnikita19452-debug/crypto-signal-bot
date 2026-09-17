@@ -1,8 +1,8 @@
 python-telegram-bot==21.6
-openai==1.55.3
 python-dotenv==1.0.1
 ccxt==4.4.28
 apscheduler==3.10.4
 aiohttp==3.10.10
 feedparser==6.0.11
 pandas==2.2.3
+freeflow-llm
