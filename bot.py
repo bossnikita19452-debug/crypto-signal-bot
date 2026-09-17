@@ -52,7 +52,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not signals:
             await query.edit_message_text("Пока нет сигналов.")
             return
-        status_map = {"win": "✅", "loss": "❌", "expired": "⏰", "active": "⏳"}
+        status_map = {
+            "win": "✅",
+            "loss": "❌",
+            "expired": "⏰",
+            "active": "⏳",
+            "not_triggered": "⚪️",
+        }
         text = "<b>Последние 10 сигналов:</b>\n\n"
         for s in signals:
             emoji = status_map.get(s[11], "⚪")
@@ -69,6 +75,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Всего сигналов: <b>{st['total']}</b>\n"
             f"✅ Успешных (TP): <b>{st['win']}</b>\n"
             f"❌ Убыточных (SL): <b>{st['loss']}</b>\n"
+            f"⚪️ Вход не активирован: <b>{st['not_triggered']}</b>\n"
             f"⏰ Истекло: <b>{st['expired']}</b>\n"
             f"⏳ В ожидании: <b>{st['active']}</b>\n\n"
             f"Winrate (закрытые): <b>{winrate}%</b>\n"
@@ -77,10 +84,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if st["by_type"]:
             text += "\n<b>По типам:</b>\n"
-            for ttype, data in st["by_type"].items():
+            for ttype, data_t in st["by_type"].items():
                 text += (
-                    f"• {ttype}: {data['total']} сигналов, "
-                    f"winrate {data['winrate']}%\n"
+                    f"• {ttype}: {data_t['total']} сигналов, "
+                    f"winrate {data_t['winrate']}%, "
+                    f"не активировано: {data_t.get('not_triggered', 0)}\n"
                 )
 
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=main_menu())
@@ -161,7 +169,6 @@ async def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    # Передаём бота в stats_checker для отправки уведомлений
     set_bot(app.bot)
 
     scheduler = AsyncIOScheduler()
