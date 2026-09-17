@@ -15,7 +15,6 @@ from stats_checker import check_open_signals
 MIN_STOP_PCT = 1.5
 
 COINS = {
-    # Топ-10
     "BTC/USDT": "bitcoin",
     "ETH/USDT": "ethereum",
     "BNB/USDT": "binancecoin",
@@ -26,7 +25,6 @@ COINS = {
     "ADA/USDT": "cardano",
     "AVAX/USDT": "avalanche-2",
     "LINK/USDT": "chainlink",
-    # Layer 1 / Layer 2
     "SUI/USDT": "sui",
     "TON/USDT": "the-open-network",
     "ARB/USDT": "arbitrum",
@@ -37,7 +35,6 @@ COINS = {
     "DOT/USDT": "polkadot",
     "SEI/USDT": "sei-network",
     "INJ/USDT": "injective-protocol",
-    # DeFi и инфраструктура
     "AAVE/USDT": "aave",
     "UNI/USDT": "uniswap",
     "LDO/USDT": "lido-dao",
@@ -48,7 +45,6 @@ COINS = {
     "WIF/USDT": "dogwifcoin",
     "PEPE/USDT": "pepe",
     "SHIB/USDT": "shiba-inu",
-    # Волатильные / трендовые
     "HYPE/USDT": "hyperliquid",
     "ZEC/USDT": "zcash",
     "XMR/USDT": "monero",
@@ -59,7 +55,6 @@ COINS = {
     "TAO/USDT": "bittensor",
     "AKT/USDT": "akash-network",
     "AKE/USDT": "akedo",
-    # Добавляем ещё монет до 70
     "ETC/USDT": "ethereum-classic",
     "XLM/USDT": "stellar",
     "ALGO/USDT": "algorand",
@@ -92,27 +87,17 @@ COINS = {
     "NEO/USDT": "neo",
 }
 
-
 def _get_current_group() -> list[str]:
-    """Вернуть список монет для текущего часа (с учётом групп)."""
     all_symbols = list(COINS.keys())
-
     if not USE_GROUPS or NUM_GROUPS <= 1:
         return all_symbols
-
-    # Определяем номер группы по текущему часу
     hour = datetime.utcnow().hour
     group_index = hour % NUM_GROUPS
-
-    # Разбиваем список на NUM_GROUPS частей
     group_size = len(all_symbols) // NUM_GROUPS
     start = group_index * group_size
-
     if group_index == NUM_GROUPS - 1:
-        # Последняя группа берёт остаток
         return all_symbols[start:]
     return all_symbols[start:start + group_size]
-
 
 async def get_prices(symbols: list[str]):
     ids = ",".join(COINS[s] for s in symbols if s in COINS)
@@ -126,13 +111,11 @@ async def get_prices(symbols: list[str]):
         print(f"Ошибка получения цен: {e}")
     return {}
 
-
 async def scan_once(bot: Bot):
     if not config.SCANNING_ENABLED:
         print("⏸ Сканирование остановлено пользователем")
         return
 
-    # Выбираем монеты для текущего часа
     symbols = _get_current_group()
     hour = datetime.utcnow().hour
     group_num = hour % NUM_GROUPS if USE_GROUPS else 0
@@ -163,7 +146,7 @@ async def scan_once(bot: Bot):
                 f"Монета: {symbol}\n"
                 f"Текущая цена: ${current_price}\n"
                 f"Таймфрейм: {meta['tf']}\n"
-                f"Ищи трендовый сетап с откатом для среднесрочной торговли."
+                f"Ищи сетап для входа по рынку СЕЙЧАС. Если цена уже подтверждает вход — дай сигнал."
             )
 
             result = await analyze_coin(symbol, meta["tf"], market_data)
@@ -181,14 +164,23 @@ async def scan_once(bot: Bot):
             if side == "NONE":
                 continue
 
-            rr = float(result.get("rr", 0))
-            if not (meta["min_rr"] <= rr <= meta["max_rr"]):
+            # МЫ ПРИНУДИТЕЛЬНО БЕРЁМ ТЕКУЩУЮ ЦЕНУ КАК ВХОД
+            entry = current_price
+            stop = result.get("stop", 0)
+            take = result.get("take", 0)
+
+            if not stop or not take:
                 continue
 
-            entry = result.get("entry", 0)
-            stop = result.get("stop", 0)
+            # Пересчитываем RR на основе текущей цены входа
+            risk = abs(entry - stop)
+            reward = abs(take - entry)
+            if risk <= 0:
+                continue
+            rr = round(reward / risk, 2)
 
-            if not entry or not stop or entry <= 0 or stop <= 0:
+            if not (meta["min_rr"] <= rr <= meta["max_rr"]):
+                print(f"⛔ {symbol}: RR {rr} вне диапазона")
                 continue
 
             stop_pct = abs(entry - stop) / entry * 100
@@ -204,7 +196,7 @@ async def scan_once(bot: Bot):
                 "side": side,
                 "entry": entry,
                 "stop": stop,
-                "take": result.get("take", 0),
+                "take": take,
                 "rr": rr,
                 "strength": result.get("strength", "medium"),
                 "reason": result.get("reason", "")
@@ -215,11 +207,10 @@ async def scan_once(bot: Bot):
             emoji = SIGNAL_EMOJI.get(result.get("strength", "medium"), "⚪")
             text = (
                 f"{emoji} <b>{meta['name']} | {symbol}</b>\n\n"
-                f"Текущая цена: <code>${current_price}</code>\n"
+                f"Вход (сейчас): <code>${entry}</code>\n"
                 f"Направление: <b>{side}</b>\n"
-                f"Вход: <code>{entry}</code>\n"
                 f"Стоп: <code>{stop}</code>\n"
-                f"Тейк: <code>{result.get('take')}</code>\n"
+                f"Тейк: <code>{take}</code>\n"
                 f"R:R = <b>1:{rr:.2f}</b>\n"
                 f"⚡ Плечо: <b>{leverage}x</b> (стоп = 100% маржи)\n"
                 f"📏 Стоп: <b>{stop_pct:.2f}%</b> от входа\n\n"
