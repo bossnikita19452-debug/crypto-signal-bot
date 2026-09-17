@@ -2,7 +2,6 @@ import json
 import re
 from freeflow_llm import FreeFlowClient, NoProvidersAvailableError
 
-
 SYSTEM_PROMPT = """Ты — профессиональный крипто-аналитик, работающий с трендовыми стратегиями.
 
 Найди сетап для СРЕДНЕСРОЧНОЙ торговли (удержание от нескольких часов до нескольких дней).
@@ -25,13 +24,13 @@ SYSTEM_PROMPT = """Ты — профессиональный крипто-ана
 
 Правила сетапа:
 - Ищем ТРЕНД на 4-часовом таймфрейме (цена выше/ниже EMA 200).
-- Ждём ОТКАТ к EMA 50 или уровню поддержки/сопротивления.
+- Вход должен быть СРАЗУ по текущей цене (market entry), а не на откате. 
+- Сигнал считаем валидным только если текущая цена уже подтверждает вход (например, есть бычья свеча или пробой уровня).
 - Stop — за локальный минимум/максимум + буфер 0.5%.
 - ВАЖНО: расстояние от входа до стопа должно быть НЕ МЕНЬШЕ 1.5% от цены входа.
 - Take = минимум 1.5R, максимум 3R.
-- Если чёткого тренда с откатом нет — верни side: "NONE".
+- Если чёткого подтверждения для входа по рынку нет — верни side: "NONE".
 """
-
 
 def _extract_json(text: str) -> dict | None:
     if not text:
@@ -65,7 +64,6 @@ def _extract_json(text: str) -> dict | None:
 
     return None
 
-
 async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
     try:
         with FreeFlowClient() as client:
@@ -74,7 +72,7 @@ async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": market_data},
                 ],
-                model="openai/gpt-oss-120b",  # Groq — актуальная модель
+                model="openai/gpt-oss-120b",
                 temperature=0.2,
                 max_tokens=1000,
             )
@@ -87,7 +85,6 @@ async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
         return parsed
 
     except NoProvidersAvailableError:
-        # Пробуем Gemini с актуальной моделью
         try:
             with FreeFlowClient() as client:
                 response = client.chat(
@@ -95,7 +92,7 @@ async def analyze_coin(symbol: str, timeframe: str, market_data: str) -> dict:
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": market_data},
                     ],
-                    model="gemini-3.6-flash",  # Gemini — актуальная модель
+                    model="gemini-3.6-flash",
                     temperature=0.2,
                     max_tokens=1000,
                 )
