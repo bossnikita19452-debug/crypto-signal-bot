@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DB_PATH = "signals.db"
 
@@ -35,11 +35,13 @@ def init_db():
             changed_at TEXT
         )
     """)
-    # Миграция: если таблица старая и поля нет — добавим
-    try:
-        c.execute("ALTER TABLE signals ADD COLUMN triggered INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS toxic_coins (
+            symbol TEXT PRIMARY KEY,
+            fail_streak INTEGER DEFAULT 0,
+            until TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -95,7 +97,6 @@ def get_recent_signals(limit=10):
 
 
 def mark_triggered(signal_id: int):
-    """Отметить, что вход был активирован."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE signals SET triggered = 1 WHERE id = ?", (signal_id,))
@@ -111,6 +112,53 @@ def update_signal_status(signal_id: int, status: str, result_price: float = None
         SET status = ?, result_price = ?, closed_at = ?
         WHERE id = ?
     """, (status, result_price, datetime.utcnow().isoformat(), signal_id))
+    conn.commit()
+    conn.close()
+
+
+# ─── Журнал «токсичных» монет ────────────────────────────────────
+def get_toxic_symbols() -> list:
+    """Вернуть монеты, которые временно исключены из сканирования."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    c.execute("SELECT symbol FROM toxic_coins WHERE until > ?", (now,))
+    rows = [r[0] for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def register_loss(symbol: str):
+    """Зарегистрировать убыток. Если стрик >= TOXIC_STREAK — добавить в токсичные."""
+    from config import TOXIC_STREAK, TOXIC_COOLDOWN_HOURS
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT fail_streak FROM toxic_coins WHERE symbol = ?", (symbol,))
+    row = c.fetchone()
+    streak = (row[0] + 1) if row else 1
+
+    if streak >= TOXIC_STREAK:
+        until = (datetime.utcnow() + timedelta(hours=TOXIC_COOLDOWN_HOURS)).isoformat()
+        c.execute("""
+            INSERT INTO toxic_coins (symbol, fail_streak, until)
+            VALUES (?, ?, ?)
+            ON CONFLICT(symbol) DO UPDATE SET fail_streak = ?, until = ?
+        """, (symbol, streak, until, streak, until))
+    else:
+        c.execute("""
+            INSERT INTO toxic_coins (symbol, fail_streak, until)
+            VALUES (?, ?, NULL)
+            ON CONFLICT(symbol) DO UPDATE SET fail_streak = ?
+        """, (symbol, streak, streak))
+    conn.commit()
+    conn.close()
+
+
+def register_win(symbol: str):
+    """Сбросить стрик убытков при выигрыше."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM toxic_coins WHERE symbol = ?", (symbol,))
     conn.commit()
     conn.close()
 
